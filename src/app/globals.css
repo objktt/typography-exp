@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+  overflow: hidden;
+}
+
+/* Custom tweaks for tweakpane inside our container */
+.tp-dfwv {
+  width: 100% !important;
+  border-radius: 0 !important;
+  font-family: var(--font-mono) !important;
+}
