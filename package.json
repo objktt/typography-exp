@@ -11,6 +11,7 @@
   "dependencies": {
     "@fontsource-variable/google-sans-flex": "^5.2.3",
     "@giphy/js-fetch-api": "^5.8.0",
+    "@neondatabase/serverless": "^1.1.0",
     "@types/p5": "^1.7.7",
     "next": "16.2.6",
     "p5": "^2.2.3",

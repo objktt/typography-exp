@@ -2,58 +2,53 @@ import type { PosterState } from './types';
 
 // ---------------------------------------------------------------------------
 // Poster templates — save a finished design under a name and reload it later.
-// Stored in localStorage; a template is just a PosterState (pure data), so
-// loadPoster() can rebuild the engines from it.
+// Stored server-side in Neon (Postgres) via /api/templates, so templates persist
+// across devices and can be shared by URL. A template is just a PosterState
+// (pure data), so loadPoster() can rebuild the engines from it.
 // ---------------------------------------------------------------------------
 
-const KEY = 'antlii.templates.v1';
-
-export interface PosterTemplate {
+export interface TemplateMeta {
+  id: string;
   name: string;
+  layerCount: number;
   createdAt: number;
-  state: PosterState;
 }
 
-function read(): PosterTemplate[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? (JSON.parse(raw) as PosterTemplate[]) : [];
-  } catch {
-    return [];
-  }
+/** List all saved templates (metadata only, newest first). */
+export async function listTemplates(): Promise<TemplateMeta[]> {
+  const res = await fetch('/api/templates', { cache: 'no-store' });
+  if (!res.ok) throw new Error(`list failed: ${res.status}`);
+  return res.json();
 }
 
-function write(list: PosterTemplate[]): void {
-  if (typeof window === 'undefined') return;
-  try { localStorage.setItem(KEY, JSON.stringify(list)); } catch { /* quota */ }
+/** Save (or overwrite by name) the current design. Returns the saved metadata. */
+export async function saveTemplate(name: string, state: PosterState): Promise<TemplateMeta> {
+  const res = await fetch('/api/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, state }),
+  });
+  if (!res.ok) throw new Error(`save failed: ${res.status}`);
+  return res.json();
 }
 
-function clone(state: PosterState): PosterState {
-  const sc = (globalThis as { structuredClone?: <T>(v: T) => T }).structuredClone;
-  return sc ? sc(state) : JSON.parse(JSON.stringify(state));
+/** Delete a template by id. */
+export async function deleteTemplate(id: string): Promise<void> {
+  const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`delete failed: ${res.status}`);
 }
 
-export function listTemplates(): PosterTemplate[] {
-  return read().sort((a, b) => b.createdAt - a.createdAt);
+/** Fetch a single template's full PosterState by id (used by Load + share links). */
+export async function getTemplate(id: string): Promise<PosterState | null> {
+  const res = await fetch(`/api/templates/${id}`, { cache: 'no-store' });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`get failed: ${res.status}`);
+  const data = (await res.json()) as { state: PosterState };
+  return data.state;
 }
 
-/** Save (or overwrite) a template by name. Returns the updated list. */
-export function saveTemplate(name: string, state: PosterState): PosterTemplate[] {
-  const trimmed = name.trim();
-  if (!trimmed) return listTemplates();
-  const list = read().filter((t) => t.name !== trimmed);
-  list.push({ name: trimmed, createdAt: Date.now(), state: clone(state) });
-  write(list);
-  return listTemplates();
-}
-
-export function deleteTemplate(name: string): PosterTemplate[] {
-  write(read().filter((t) => t.name !== name));
-  return listTemplates();
-}
-
-export function getTemplate(name: string): PosterState | null {
-  const t = read().find((x) => x.name === name);
-  return t ? clone(t.state) : null;
+/** Build a shareable URL that auto-loads a template on open. */
+export function shareUrl(id: string): string {
+  if (typeof window === 'undefined') return `/?t=${id}`;
+  return `${window.location.origin}/?t=${id}`;
 }

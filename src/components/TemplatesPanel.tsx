@@ -2,7 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import type { PosterState } from '@/lib/types';
-import { listTemplates, saveTemplate, deleteTemplate, getTemplate, type PosterTemplate } from '@/lib/templates';
+import {
+  listTemplates,
+  saveTemplate,
+  deleteTemplate,
+  getTemplate,
+  shareUrl,
+  type TemplateMeta,
+} from '@/lib/templates';
 
 interface TemplatesPanelProps {
   open: boolean;
@@ -12,51 +19,116 @@ interface TemplatesPanelProps {
 }
 
 export function TemplatesPanel({ open, onClose, currentState, onLoad }: TemplatesPanelProps) {
-  const [templates, setTemplates] = useState<PosterTemplate[]>([]);
+  const [templates, setTemplates] = useState<TemplateMeta[]>([]);
   const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  useEffect(() => { if (open) setTemplates(listTemplates()); }, [open]);
+  const refresh = async () => {
+    setError(null);
+    try {
+      setTemplates(await listTemplates());
+    } catch {
+      setError('Could not load templates.');
+    }
+  };
+
+  useEffect(() => {
+    if (open) refresh();
+  }, [open]);
 
   if (!open) return null;
 
-  const handleSave = () => {
-    if (!name.trim()) return;
-    setTemplates(saveTemplate(name, currentState));
-    setName('');
+  const handleSave = async () => {
+    if (!name.trim() || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await saveTemplate(name, currentState);
+      setName('');
+      await refresh();
+    } catch {
+      setError('Save failed.');
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleLoad = (t: PosterTemplate) => {
-    const state = getTemplate(t.name);
-    if (state) { onLoad(state); onClose(); }
+  const handleLoad = async (t: TemplateMeta) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const state = await getTemplate(t.id);
+      if (state) {
+        onLoad(state);
+        onClose();
+      } else {
+        setError('Template not found.');
+      }
+    } catch {
+      setError('Load failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async (t: TemplateMeta) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await deleteTemplate(t.id);
+      await refresh();
+    } catch {
+      setError('Delete failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleShare = async (t: TemplateMeta) => {
+    const url = shareUrl(t.id);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(t.id);
+      setTimeout(() => setCopiedId((c) => (c === t.id ? null : c)), 1500);
+    } catch {
+      window.prompt('Copy share link:', url);
+    }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="w-[420px] max-h-[80vh] bg-[#141414] border border-[#333] rounded-lg shadow-2xl p-5 flex flex-col"
+        className="w-[440px] max-h-[80vh] bg-[#141414] border border-[#333] rounded-lg shadow-2xl p-5 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-white">Templates</h2>
+          <h2 className="text-sm font-bold text-white">Templates <span className="text-[9px] font-normal text-gray-500">· cloud</span></h2>
           <button onClick={onClose} className="text-gray-500 hover:text-white text-xs">✕</button>
         </div>
 
         {/* Save current */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-3">
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSave()}
             placeholder="Save current design as…"
-            className="flex-1 px-2 py-1.5 text-xs bg-[#222] border border-[#333] rounded text-white focus:outline-none focus:border-blue-500"
+            disabled={busy}
+            className="flex-1 px-2 py-1.5 text-xs bg-[#222] border border-[#333] rounded text-white focus:outline-none focus:border-blue-500 disabled:opacity-50"
           />
           <button
             onClick={handleSave}
-            className="px-3 py-1.5 text-xs font-semibold bg-white text-black rounded hover:bg-gray-200"
+            disabled={busy || !name.trim()}
+            className="px-3 py-1.5 text-xs font-semibold bg-white text-black rounded hover:bg-gray-200 disabled:opacity-40"
           >
             Save
           </button>
         </div>
+
+        {error && <div className="text-[10px] text-red-400 mb-2">{error}</div>}
 
         {/* List */}
         <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
@@ -64,13 +136,19 @@ export function TemplatesPanel({ open, onClose, currentState, onLoad }: Template
             <div className="text-xs text-gray-600 text-center py-8">No templates yet. Design a poster and save it.</div>
           ) : (
             templates.map((t) => (
-              <div key={t.name} className="flex items-center gap-2 px-2 py-1.5 rounded bg-[#1a1a1a] border border-[#2a2a2a]">
+              <div key={t.id} className="flex items-center gap-2 px-2 py-1.5 rounded bg-[#1a1a1a] border border-[#2a2a2a]">
                 <span className="flex-1 text-xs text-gray-200 truncate">{t.name}</span>
-                <span className="text-[9px] text-gray-600">{t.state.layers.length} layers</span>
-                <button onClick={() => handleLoad(t)} className="px-2 py-0.5 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500">Load</button>
+                <span className="text-[9px] text-gray-600">{t.layerCount} layers</span>
                 <button
-                  onClick={() => setTemplates(deleteTemplate(t.name))}
-                  className="text-gray-600 hover:text-red-400 text-[10px]"
+                  onClick={() => handleShare(t)}
+                  className="px-2 py-0.5 text-[10px] bg-[#333] text-gray-200 rounded hover:bg-[#444]"
+                  title="Copy share link"
+                >{copiedId === t.id ? 'Copied!' : 'Share'}</button>
+                <button onClick={() => handleLoad(t)} disabled={busy} className="px-2 py-0.5 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-40">Load</button>
+                <button
+                  onClick={() => handleDelete(t)}
+                  disabled={busy}
+                  className="text-gray-600 hover:text-red-400 text-[10px] disabled:opacity-40"
                 >✕</button>
               </div>
             ))

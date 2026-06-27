@@ -8,6 +8,7 @@ import { GeneratePanel } from '@/components/GeneratePanel';
 import { TemplatesPanel } from '@/components/TemplatesPanel';
 import { CalendarFormPanel } from '@/components/CalendarFormPanel';
 import { generatePoster, type PosterFormat } from '@/lib/poster-generator';
+import { getTemplate } from '@/lib/templates';
 import { usePosterState } from '@/hooks/usePosterState';
 
 const ratioOptions = [
@@ -72,6 +73,25 @@ export default function Home() {
     } catch {
       /* invalid payload */
     }
+  }, [loadPoster]);
+
+  // Share-link hook: ?t=<id> loads a saved cloud template on open, then cleans
+  // the URL so a refresh doesn't reload it over edits.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('t');
+    if (!id) return;
+    let cancelled = false;
+    getTemplate(id)
+      .then((s) => {
+        if (s && !cancelled) loadPoster(s);
+      })
+      .catch(() => {})
+      .finally(() => {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('t');
+        window.history.replaceState(null, '', url.toString());
+      });
+    return () => { cancelled = true; };
   }, [loadPoster]);
 
   // Delete / Backspace removes the selected layer (unless typing in a field).
