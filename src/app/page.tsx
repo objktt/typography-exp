@@ -10,6 +10,8 @@ import { CalendarFormPanel } from '@/components/CalendarFormPanel';
 import { generatePoster, type PosterFormat } from '@/lib/poster-generator';
 import { getTemplate } from '@/lib/templates';
 import { usePosterState } from '@/hooks/usePosterState';
+import { AuthGate } from '@/components/AuthGate';
+import { UserButton } from '@clerk/nextjs';
 
 const ratioOptions = [
   { label: '1:1', value: '1:1' },
@@ -155,6 +157,7 @@ export default function Home() {
   const Divider = () => <div className="w-px h-5 bg-[#2e2e2e] shrink-0" />;
 
   return (
+    <AuthGate>
     <main className="flex h-screen flex-col bg-[#1a1a1a] text-white font-mono overflow-hidden">
       {/* Top Bar */}
       <div className="flex-shrink-0 border-b border-[#2e2e2e] bg-[#111]">
@@ -247,6 +250,10 @@ export default function Home() {
                 {isRecording ? `● ${recordLeft}s` : 'Video'}
               </button>
             </div>
+
+            <Divider />
+
+            <UserButton />
           </div>
         </div>
       </div>
@@ -367,5 +374,6 @@ export default function Home() {
         </div>
       )}
     </main>
+    </AuthGate>
   );
 }
