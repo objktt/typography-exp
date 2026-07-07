@@ -16,9 +16,11 @@ interface TemplatesPanelProps {
   onClose: () => void;
   currentState: PosterState;
   onLoad: (state: PosterState) => void;
+  /** Snapshot of the live canvas, saved as the template's thumbnail. */
+  getThumbnail?: () => string | null;
 }
 
-export function TemplatesPanel({ open, onClose, currentState, onLoad }: TemplatesPanelProps) {
+export function TemplatesPanel({ open, onClose, currentState, onLoad, getThumbnail }: TemplatesPanelProps) {
   const [templates, setTemplates] = useState<TemplateMeta[]>([]);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -45,7 +47,7 @@ export function TemplatesPanel({ open, onClose, currentState, onLoad }: Template
     setBusy(true);
     setError(null);
     try {
-      await saveTemplate(name, currentState);
+      await saveTemplate(name, currentState, getThumbnail?.() ?? undefined);
       setName('');
       await refresh();
     } catch {
@@ -101,7 +103,7 @@ export function TemplatesPanel({ open, onClose, currentState, onLoad }: Template
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="w-[440px] max-h-[80vh] bg-[#141414] border border-[#333] rounded-lg shadow-2xl p-5 flex flex-col"
+        className="w-[560px] max-h-[82vh] bg-[#141414] border border-[#333] rounded-lg shadow-2xl p-5 flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-3">
@@ -130,28 +132,48 @@ export function TemplatesPanel({ open, onClose, currentState, onLoad }: Template
 
         {error && <div className="text-[10px] text-red-400 mb-2">{error}</div>}
 
-        {/* List */}
-        <div className="flex-1 overflow-y-auto space-y-1 min-h-0">
+        {/* Grid */}
+        <div className="flex-1 overflow-y-auto min-h-0">
           {templates.length === 0 ? (
             <div className="text-xs text-gray-600 text-center py-8">No templates yet. Design a poster and save it.</div>
           ) : (
-            templates.map((t) => (
-              <div key={t.id} className="flex items-center gap-2 px-2 py-1.5 rounded bg-[#1a1a1a] border border-[#2a2a2a]">
-                <span className="flex-1 text-xs text-gray-200 truncate">{t.name}</span>
-                <span className="text-[9px] text-gray-600">{t.layerCount} layers</span>
-                <button
-                  onClick={() => handleShare(t)}
-                  className="px-2 py-0.5 text-[10px] bg-[#333] text-gray-200 rounded hover:bg-[#444]"
-                  title="Copy share link"
-                >{copiedId === t.id ? 'Copied!' : 'Share'}</button>
-                <button onClick={() => handleLoad(t)} disabled={busy} className="px-2 py-0.5 text-[10px] bg-blue-600 text-white rounded hover:bg-blue-500 disabled:opacity-40">Load</button>
-                <button
-                  onClick={() => handleDelete(t)}
-                  disabled={busy}
-                  className="text-gray-600 hover:text-red-400 text-[10px] disabled:opacity-40"
-                >✕</button>
-              </div>
-            ))
+            <div className="grid grid-cols-3 gap-2">
+              {templates.map((t) => (
+                <div key={t.id} className="group rounded bg-[#1a1a1a] border border-[#2a2a2a] overflow-hidden hover:border-[#444]">
+                  <button
+                    onClick={() => handleLoad(t)}
+                    disabled={busy}
+                    className="block w-full aspect-[4/5] bg-[#0d0d0d] relative disabled:opacity-40"
+                    title={`Load "${t.name}"`}
+                  >
+                    {t.thumb ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={t.thumb} alt={t.name} className="absolute inset-0 w-full h-full object-contain" />
+                    ) : (
+                      <span className="absolute inset-0 flex items-center justify-center text-[9px] text-gray-600">no preview</span>
+                    )}
+                  </button>
+                  <div className="px-1.5 py-1">
+                    <div className="text-[10px] text-gray-200 truncate">{t.name}</div>
+                    <div className="flex items-center justify-between mt-0.5">
+                      <span className="text-[8px] text-gray-600">{t.layerCount} layers</span>
+                      <span className="flex gap-1.5">
+                        <button
+                          onClick={() => handleShare(t)}
+                          className="text-[9px] text-gray-500 hover:text-white"
+                          title="Copy share link"
+                        >{copiedId === t.id ? 'copied' : 'share'}</button>
+                        <button
+                          onClick={() => handleDelete(t)}
+                          disabled={busy}
+                          className="text-[9px] text-gray-600 hover:text-red-400 disabled:opacity-40"
+                        >✕</button>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

@@ -20,6 +20,14 @@ npx puppeteer browsers install chrome   # downloads Chromium (~150MB)
 # ffmpeg must be on PATH (brew install ffmpeg)
 ```
 
+### Render key (required)
+
+The studio is gated behind sign-in; `?gen=` bypasses the gate, so the proxy
+(`src/proxy.ts`) only honors it when the request also carries
+`?key=<RENDER_SECRET>`. The secret lives in `.env.local` (and must be set in
+the Vercel project env to render against production). The render script picks
+it up automatically: `--key` flag → `RENDER_SECRET` env var → `.env.local`.
+
 ## Render
 
 ```bash
@@ -32,7 +40,8 @@ node scripts/render-poster.mjs \
   --format feed --style auto --video --seconds 6 --out ./out --name good-boy
 ```
 
-Flags: `--url` (default http://localhost:3000), `--format` feed|story,
+Flags: `--url` (default http://localhost:3000), `--key` (render secret;
+defaults to `$RENDER_SECRET`), `--format` feed|story,
 `--style` auto|swiss-red|noir|blueprint|newsprint, `--video`, `--seconds`,
 `--fps`, `--out`, `--name`.
 

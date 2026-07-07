@@ -12,6 +12,7 @@ export interface TemplateMeta {
   name: string;
   layerCount: number;
   createdAt: number;
+  thumb: string | null;
 }
 
 /** List all saved templates (metadata only, newest first). */
@@ -22,11 +23,11 @@ export async function listTemplates(): Promise<TemplateMeta[]> {
 }
 
 /** Save (or overwrite by name) the current design. Returns the saved metadata. */
-export async function saveTemplate(name: string, state: PosterState): Promise<TemplateMeta> {
+export async function saveTemplate(name: string, state: PosterState, thumb?: string | null): Promise<TemplateMeta> {
   const res = await fetch('/api/templates', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, state }),
+    body: JSON.stringify({ name, state, thumb: thumb ?? undefined }),
   });
   if (!res.ok) throw new Error(`save failed: ${res.status}`);
   return res.json();

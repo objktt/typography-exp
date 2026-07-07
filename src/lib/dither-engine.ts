@@ -16,6 +16,14 @@ export const ditherParams: ControlParam[] = [
     { label: 'Bold', value: '700' },
     { label: 'Black', value: '900' }
   ], default: '900', folder: 'TEXT' },
+  { key: 'posX', name: 'Pos X', type: 'number', min: 0, max: 1, step: 0.005, default: 0.5, folder: 'TEXT' },
+  { key: 'posY', name: 'Pos Y', type: 'number', min: 0, max: 1, step: 0.005, default: 0.5, folder: 'TEXT' },
+  { key: 'align', name: 'Align', type: 'select', folder: 'TEXT', default: 'center', options: [
+    { label: 'Left', value: 'left' },
+    { label: 'Center', value: 'center' },
+    { label: 'Right', value: 'right' },
+  ] },
+  { key: 'fitWidth', name: 'Fit Width', type: 'number', min: 0, max: 1, step: 0.01, default: 0, folder: 'TEXT' },
 
   // DITHER
   { key: 'preset', name: 'Preset', type: 'select', options: [
@@ -97,21 +105,41 @@ export class DitherEngine implements LayerEngine {
     const ctx = cvs.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
-    ctx.fillStyle = params.backgroundColor;
+    // Render text white-on-black internally: bright pixels are the dither
+    // mask's "on" pixels, so foregroundColor paints the TEXT (intuitive) and
+    // backgroundColor / transparentBg apply to the surrounding field.
+    ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, cvs.width, cvs.height);
 
-    ctx.font = `${params.fontWeight} ${params.fontSize}px "Google Sans Flex Variable", Helvetica, Arial, sans-serif`;
-    ctx.textAlign = 'center';
+    const font = (size: number) => `${params.fontWeight} ${size}px "Google Sans Flex Variable", Helvetica, Arial, sans-serif`;
+    let size = params.fontSize;
+    ctx.font = font(size);
+    ctx.textAlign = (params.align as CanvasTextAlign) || 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = params.foregroundColor;
+    ctx.fillStyle = '#ffffff';
 
-    const lines = params.text.split('\\n');
-    const lineHeight = params.fontSize * 1.1;
+    // Accept real newlines and literal "\n" (models emit either).
+    const lines = String(params.text ?? '').split(/\r?\n|\\n/);
+
+    // Auto-fit: shrink so the widest line fits within fitWidth × canvas width.
+    const fitPx = (params.fitWidth ?? 0) * cvs.width;
+    if (fitPx > 0) {
+      let widest = 0;
+      for (const line of lines) widest = Math.max(widest, ctx.measureText(line).width);
+      if (widest > fitPx) {
+        size *= fitPx / widest;
+        ctx.font = font(size);
+      }
+    }
+
+    const cx = (params.posX ?? 0.5) * cvs.width;
+    const cy = (params.posY ?? 0.5) * cvs.height;
+    const lineHeight = size * 1.1;
     const totalHeight = (lines.length - 1) * lineHeight;
-    let startY = pg.height / 2 - totalHeight / 2;
+    let startY = cy - totalHeight / 2;
 
     for (const line of lines) {
-      ctx.fillText(line, pg.width / 2, startY);
+      ctx.fillText(line, cx, startY);
       startY += lineHeight;
     }
 

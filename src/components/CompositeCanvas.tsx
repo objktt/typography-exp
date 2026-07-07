@@ -3,9 +3,12 @@
 import { useEffect, useRef, useImperativeHandle, forwardRef, useState, useCallback } from 'react';
 import type p5 from 'p5';
 import type { Layer, LayerEngine } from '@/lib/types';
+import { getModSignals, applyModulations } from '@/lib/modulation';
 
 export interface CompositeCanvasRef {
   exportAsImage: (filename?: string, scale?: number) => void;
+  /** Downscaled snapshot of the current frame as a data URL (template thumbnails). */
+  captureThumbnail: (maxWidth?: number) => string | null;
   exportAsVideo: (filename?: string, seconds?: number, fps?: number) => void;
 }
 
@@ -50,6 +53,14 @@ export const CompositeCanvas = forwardRef<CompositeCanvasRef, CompositeCanvasPro
     const playingRef = useRef(playing);
     const frozenTimeRef = useRef(0);
     const timeOffsetRef = useRef(0);
+
+    // Selection outline: cached opaque-bounding-box of the selected layer's
+    // buffer (recomputed at a low rate — full pixel reads are not per-frame).
+    const selBoxRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+    const selBoxAtRef = useRef(0);
+    const selBoxForRef = useRef<string | null>(null);
+    /** Suppress UI overlays (selection box) while exporting/capturing. */
+    const hideOverlayRef = useRef(false);
 
     useEffect(() => { layersRef.current = layers; }, [layers]);
     useEffect(() => { engineInstancesRef.current = engineInstances; }, [engineInstances]);
@@ -357,15 +368,42 @@ export const CompositeCanvas = forwardRef<CompositeCanvasRef, CompositeCanvasPro
     }, [displayW, displayH]);
 
     useImperativeHandle(ref, () => ({
+      captureThumbnail: (maxWidth = 360) => {
+        hideOverlayRef.current = true;
+        p5Instance.current?.redraw();
+        const canvas = canvasWrapRef.current?.querySelector('canvas') as HTMLCanvasElement | null;
+        if (!canvas || canvas.width === 0) {
+          hideOverlayRef.current = false;
+          return null;
+        }
+        const w = Math.min(maxWidth, canvas.width);
+        const h = Math.round(w * (canvas.height / canvas.width));
+        const off = document.createElement('canvas');
+        off.width = w;
+        off.height = h;
+        const ctx = off.getContext('2d');
+        if (!ctx) return null;
+        ctx.drawImage(canvas, 0, 0, w, h);
+        let out: string;
+        try {
+          out = off.toDataURL('image/webp', 0.82);
+        } catch {
+          out = off.toDataURL('image/jpeg', 0.82);
+        }
+        hideOverlayRef.current = false;
+        return out;
+      },
       exportAsImage: (filename = 'poster', scale = 1) => {
         if (p5Instance.current) {
           const p = p5Instance.current;
           const originalDensity = p.pixelDensity();
+          hideOverlayRef.current = true;
           p.pixelDensity(scale * window.devicePixelRatio);
           p.redraw();
           setTimeout(() => {
             p.saveCanvas(filename, 'png');
             p.pixelDensity(originalDensity);
+            hideOverlayRef.current = false;
             p.redraw();
           }, 50);
         }
@@ -389,9 +427,11 @@ export const CompositeCanvas = forwardRef<CompositeCanvasRef, CompositeCanvasPro
         const mime = candidates.find((t) => MediaRecorder.isTypeSupported(t)) || 'video/webm';
         const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
         const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12_000_000 });
+        hideOverlayRef.current = true;
         const chunks: BlobPart[] = [];
         rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
         rec.onstop = () => {
+          hideOverlayRef.current = false;
           const blob = new Blob(chunks, { type: mime });
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
@@ -461,13 +501,14 @@ export const CompositeCanvas = forwardRef<CompositeCanvasRef, CompositeCanvasPro
 
             // Draw & composite each visible layer
             const ctx = p.drawingContext as CanvasRenderingContext2D;
+            const signals = getModSignals();
             for (const layer of currentLayers) {
               if (!layer.visible) continue;
               const engine = instances.get(layer.id);
               const pg = buffersRef.current.get(layer.id);
               if (!engine || !pg) continue;
 
-              engine.draw(pg, p, time, layer.params);
+              engine.draw(pg, p, time, applyModulations(layer, signals, time));
 
               // Use p5's image() for compositing — works across p5 versions
               ctx.save();
@@ -475,6 +516,62 @@ export const CompositeCanvas = forwardRef<CompositeCanvasRef, CompositeCanvasPro
               ctx.globalCompositeOperation = layer.blendMode;
               p.image(pg, 0, 0);
               ctx.restore();
+            }
+
+            // Selection outline — dashed box around the selected layer's
+            // painted content so selection is visible on canvas.
+            const sel = selectedLayerRef.current;
+            if (sel && sel.visible && !hideOverlayRef.current) {
+              const selBuf = buffersRef.current.get(sel.id);
+              if (selBuf) {
+                const now = p.millis();
+                if (selBoxForRef.current !== sel.id || now - selBoxAtRef.current > 350) {
+                  selBoxForRef.current = sel.id;
+                  selBoxAtRef.current = now;
+                  try {
+                    const bctx = selBuf.drawingContext as CanvasRenderingContext2D;
+                    const cw = bctx.canvas.width;
+                    const chh = bctx.canvas.height;
+                    const data = bctx.getImageData(0, 0, cw, chh).data;
+                    let minX = cw, minY = chh, maxX = -1, maxY = -1;
+                    const step = 4;
+                    for (let yy = 0; yy < chh; yy += step) {
+                      const row = yy * cw;
+                      for (let xx = 0; xx < cw; xx += step) {
+                        if (data[(row + xx) * 4 + 3] > 20) {
+                          if (xx < minX) minX = xx;
+                          if (xx > maxX) maxX = xx;
+                          if (yy < minY) minY = yy;
+                          if (yy > maxY) maxY = yy;
+                        }
+                      }
+                    }
+                    if (maxX >= 0) {
+                      const sx = width / cw;
+                      const sy = height / chh;
+                      selBoxRef.current = { x: minX * sx, y: minY * sy, w: (maxX - minX) * sx, h: (maxY - minY) * sy };
+                    } else {
+                      selBoxRef.current = null;
+                    }
+                  } catch {
+                    selBoxRef.current = null;
+                  }
+                }
+                const box = selBoxRef.current;
+                if (box) {
+                  const lw = Math.max(1, 1.5 / activeScaleRef.current);
+                  const m = 4 * lw;
+                  ctx.save();
+                  ctx.strokeStyle = 'rgba(70,140,255,0.95)';
+                  ctx.lineWidth = lw;
+                  ctx.setLineDash([5 * lw, 4 * lw]);
+                  ctx.strokeRect(box.x - m, box.y - m, box.w + m * 2, box.h + m * 2);
+                  ctx.restore();
+                }
+              }
+            } else {
+              selBoxForRef.current = null;
+              selBoxRef.current = null;
             }
           };
         };

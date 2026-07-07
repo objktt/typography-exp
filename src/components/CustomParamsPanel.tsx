@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { ControlParam } from '@/lib/types';
 
 interface CustomParamsPanelProps {
@@ -9,6 +10,8 @@ interface CustomParamsPanelProps {
 }
 
 export function CustomParamsPanel({ params, values, onChange }: CustomParamsPanelProps) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+
   const grouped = params.reduce((acc, param) => {
     const folder = param.folder || 'General';
     if (!acc[folder]) acc[folder] = [];
@@ -143,21 +146,32 @@ export function CustomParamsPanel({ params, values, onChange }: CustomParamsPane
     <div className="space-y-3">
       {Object.entries(grouped).map(([folder, folderParams]) => (
         <div key={folder} className="space-y-1.5">
-          <h4 className="text-[10px] uppercase tracking-wider text-gray-600 font-semibold">
+          <button
+            onClick={() => setCollapsed((c) => ({ ...c, [folder]: !c[folder] }))}
+            className="flex items-center gap-1 w-full text-left text-[10px] uppercase tracking-wider text-gray-600 font-semibold hover:text-gray-400 transition-colors"
+            aria-expanded={!collapsed[folder]}
+          >
+            <span className="text-[8px]">{collapsed[folder] ? '▸' : '▾'}</span>
             {folder}
-          </h4>
-          <div className="space-y-1">
-            {folderParams.map((param) => (
-              <div key={param.key} className="flex items-center gap-2">
-                <label className="text-[10px] text-gray-400 w-20 shrink-0 truncate">
-                  {param.name}
-                </label>
-                <div className="flex-1 min-w-0">
-                  {renderInput(param)}
+          </button>
+          {!collapsed[folder] && (
+            <div className="space-y-1">
+              {folderParams.map((param) => (
+                <div key={param.key} className="flex items-center gap-2">
+                  <label
+                    className="text-[10px] text-gray-400 w-20 shrink-0 truncate cursor-default"
+                    title={`${param.name} — double-click to reset to default`}
+                    onDoubleClick={() => onChange(param.key, param.default)}
+                  >
+                    {param.name}
+                  </label>
+                  <div className="flex-1 min-w-0">
+                    {renderInput(param)}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>

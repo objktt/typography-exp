@@ -5,13 +5,19 @@ import { useUser, SignIn } from '@clerk/nextjs';
 
 // Gates the studio behind sign-in. Signed-out users see Clerk's prebuilt login
 // screen (Google + email). Headless render (?gen=) bypasses the gate so the
-// poster automation pipeline keeps working without a session.
+// poster automation pipeline keeps working without a session — safe because
+// the proxy only lets ?gen through when it carries a valid RENDER_SECRET key
+// (see src/proxy.ts); unauthorized requests arrive here with ?gen stripped.
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useUser();
   const [bypass, setBypass] = useState(false);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).has('gen')) setBypass(true);
+    const q = new URLSearchParams(window.location.search);
+    // ?gen (headless poster render) or ?key (headless thumbnail capture) —
+    // both are validated against RENDER_SECRET by the proxy before they can
+    // reach this code, so their presence here means the request was authorized.
+    if (q.has('gen') || q.has('key')) setBypass(true);
   }, []);
 
   if (bypass) return <>{children}</>;

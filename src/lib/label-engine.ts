@@ -30,6 +30,7 @@ export const labelParams: ControlParam[] = [
   { key: 'tracking', name: 'Tracking', type: 'number', min: -0.08, max: 0.4, step: 0.005, default: 0.02, folder: 'TYPE' },
   { key: 'lineHeight', name: 'Line Height', type: 'number', min: 0.8, max: 2.4, step: 0.05, default: 1.1, folder: 'TYPE' },
   { key: 'maxWidth', name: 'Max Width', type: 'number', min: 0, max: 1, step: 0.01, default: 0, folder: 'TYPE' },
+  { key: 'fitWidth', name: 'Fit Width', type: 'number', min: 0, max: 1, step: 0.01, default: 0, folder: 'TYPE' },
 
   { key: 'posX', name: 'Pos X', type: 'number', min: 0, max: 1, step: 0.005, default: 0.08, folder: 'LAYOUT' },
   { key: 'posY', name: 'Pos Y', type: 'number', min: 0, max: 1, step: 0.005, default: 0.08, folder: 'LAYOUT' },
@@ -63,8 +64,8 @@ export class LabelEngine implements LayerEngine {
     const ctx = pg.drawingContext as CanvasRenderingContext2D & { letterSpacing?: string };
 
     const raw = String(pr.text ?? '');
-    const size = pr.fontSize;
-    const lh = size * pr.lineHeight;
+    let size = pr.fontSize;
+    let lh = size * pr.lineHeight;
     const x = pr.posX * pg.width;
     const y = pr.posY * pg.height;
 
@@ -90,6 +91,21 @@ export class LabelEngine implements LayerEngine {
           else cur = test;
         }
         lines.push(cur);
+      }
+    }
+
+    // Auto-fit: shrink the font so the widest line fits within fitWidth
+    // (fraction of canvas width). Makes big headlines overflow-proof — text
+    // width can't be predicted when the design is authored as data.
+    const fitPx = (pr.fitWidth ?? 0) * pg.width;
+    if (fitPx > 0) {
+      let widest = 0;
+      for (const line of lines) widest = Math.max(widest, ctx.measureText(line).width);
+      if (widest > fitPx) {
+        size *= fitPx / widest;
+        lh = size * pr.lineHeight;
+        ctx.font = `${pr.weight} ${size}px ${FONT_STACK}`;
+        try { ctx.letterSpacing = `${pr.tracking * size}px`; } catch { /* older browsers */ }
       }
     }
 

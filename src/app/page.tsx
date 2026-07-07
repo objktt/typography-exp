@@ -5,11 +5,13 @@ import { CompositeCanvas, type CompositeCanvasRef } from '@/components/Composite
 import { LayerList } from '@/components/LayerList';
 import { LayerInspector } from '@/components/LayerInspector';
 import { GeneratePanel } from '@/components/GeneratePanel';
+import { AIPromptPanel } from '@/components/AIPromptPanel';
 import { TemplatesPanel } from '@/components/TemplatesPanel';
 import { CalendarFormPanel } from '@/components/CalendarFormPanel';
 import { generatePoster, type PosterFormat } from '@/lib/poster-generator';
 import { getTemplate } from '@/lib/templates';
 import { usePosterState } from '@/hooks/usePosterState';
+import { enableAudio, disableAudio } from '@/lib/modulation';
 import { AuthGate } from '@/components/AuthGate';
 import { UserButton } from '@clerk/nextjs';
 
@@ -28,9 +30,20 @@ export default function Home() {
   const [isExporting, setIsExporting] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
+  const [showAI, setShowAI] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showCalForm, setShowCalForm] = useState(false);
   const [gridOn, setGridOn] = useState(false);
+  const [micOn, setMicOn] = useState(false);
+
+  const toggleMic = async () => {
+    if (micOn) {
+      disableAudio();
+      setMicOn(false);
+    } else {
+      setMicOn(await enableAudio());
+    }
+  };
 
   // Preload the poster font so canvas text renders with it (canvas doesn't
   // reliably trigger webfont loading on its own).
@@ -46,12 +59,18 @@ export default function Home() {
     state,
     engineInstances,
     selectedLayer,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
     addLayer,
+    duplicateLayer,
     removeLayer,
     reorderLayers,
     toggleLayerVisibility,
     updateLayerParam,
     updateLayerMeta,
+    setLayerModulation,
     selectLayer,
     updateCanvas,
     loadPoster,
@@ -96,21 +115,53 @@ export default function Home() {
     return () => { cancelled = true; };
   }, [loadPoster]);
 
-  // Delete / Backspace removes the selected layer (unless typing in a field).
+  // Keyboard shortcuts: undo/redo, duplicate, delete, arrow-nudge, Esc.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (e.key === 'Escape') {
+        setShowAI(false); setShowGenerate(false); setShowTemplates(false);
+        setShowCalForm(false); setShowVideoExport(false);
+        return;
+      }
+
       const el = document.activeElement as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
-      if (state.selectedLayerId) {
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
-        removeLayer(state.selectedLayerId);
+        if (e.shiftKey) redo(); else undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'd') {
+        if (state.selectedLayerId) {
+          e.preventDefault();
+          duplicateLayer(state.selectedLayerId);
+        }
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (state.selectedLayerId) {
+          e.preventDefault();
+          removeLayer(state.selectedLayerId);
+        }
+        return;
+      }
+      // Arrow keys nudge layers that have a position (posX/posY params).
+      if (e.key.startsWith('Arrow') && selectedLayer && typeof selectedLayer.params.posX === 'number') {
+        e.preventDefault();
+        const step = e.shiftKey ? 0.02 : 0.005;
+        const clamp = (v: number) => Math.min(1, Math.max(0, v));
+        if (e.key === 'ArrowLeft') updateLayerParam(selectedLayer.id, 'posX', clamp(selectedLayer.params.posX - step));
+        if (e.key === 'ArrowRight') updateLayerParam(selectedLayer.id, 'posX', clamp(selectedLayer.params.posX + step));
+        if (e.key === 'ArrowUp') updateLayerParam(selectedLayer.id, 'posY', clamp(selectedLayer.params.posY - step));
+        if (e.key === 'ArrowDown') updateLayerParam(selectedLayer.id, 'posY', clamp(selectedLayer.params.posY + step));
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [state.selectedLayerId, removeLayer]);
+  }, [state.selectedLayerId, selectedLayer, removeLayer, undo, redo, duplicateLayer, updateLayerParam]);
 
   const canvasSize = useMemo(() => {
     const baseSize = 900;
@@ -168,13 +219,36 @@ export default function Home() {
               Objktt <span className="text-gray-500 font-medium">Poster Design</span>
             </h1>
             <Divider />
-            <button onClick={() => setShowGenerate(true)} className={btnPrimary}>Generate</button>
+            <button onClick={() => setShowAI(true)} className={btnPrimary}>✨ AI Design</button>
+            <button onClick={() => setShowGenerate(true)} className={btnGhost}>Event Poster</button>
             <button onClick={() => setShowTemplates(true)} className={btnGhost}>Templates</button>
             <button onClick={() => setShowCalForm(true)} className={btnGhost}>Calendar</button>
+            <Divider />
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (⌘Z)"
+              aria-label="Undo"
+              className={`${btnGhost} px-2 disabled:opacity-30 disabled:cursor-default`}
+            >↩</button>
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (⇧⌘Z)"
+              aria-label="Redo"
+              className={`${btnGhost} px-2 disabled:opacity-30 disabled:cursor-default`}
+            >↪</button>
           </div>
 
           {/* Right — view + export */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={toggleMic}
+              title="Mic input for audio-reactive params (Reactivity section in the inspector)"
+              className={micOn ? `${btnBase} bg-purple-600 text-white` : btnGhost}
+            >
+              {micOn ? '● Mic' : 'Mic'}
+            </button>
             <button
               onClick={() => setGridOn((g) => !g)}
               title="Toggle grid + snap"
@@ -269,6 +343,8 @@ export default function Home() {
               onSelect={selectLayer}
               onToggleVisibility={toggleLayerVisibility}
               onRemove={removeLayer}
+              onDuplicate={duplicateLayer}
+              onRename={(id, name) => updateLayerMeta(id, { name })}
               onReorder={reorderLayers}
               onAddLayer={addLayer}
             />
@@ -279,7 +355,43 @@ export default function Home() {
         </div>
 
         {/* Center — Canvas work area (scrollable) */}
-        <div className="flex-1 min-w-0 bg-[#0a0a0a]">
+        <div className="flex-1 min-w-0 bg-[#0a0a0a] relative">
+          {state.layers.length === 0 && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+              <div className="pointer-events-auto w-[420px] text-center space-y-4 p-8">
+                <h2 className="text-base font-bold text-white">Start a poster</h2>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Describe it and let AI design the layers, open a template, or build it by hand.
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setShowAI(true)}
+                    className="p-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold space-y-1"
+                  >
+                    <div className="text-lg">✨</div>
+                    AI Design
+                  </button>
+                  <button
+                    onClick={() => setShowTemplates(true)}
+                    className="p-3 rounded-lg bg-[#1e1e1e] border border-[#2e2e2e] hover:bg-[#2a2a2a] text-gray-200 text-xs font-semibold space-y-1"
+                  >
+                    <div className="text-lg">▦</div>
+                    Templates
+                  </button>
+                  <button
+                    onClick={() => addLayer('label')}
+                    className="p-3 rounded-lg bg-[#1e1e1e] border border-[#2e2e2e] hover:bg-[#2a2a2a] text-gray-200 text-xs font-semibold space-y-1"
+                  >
+                    <div className="text-lg">+</div>
+                    Blank layer
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-600">
+                  ⌘Z undo · ⌘D duplicate · arrows nudge · drag layers on canvas
+                </p>
+              </div>
+            </div>
+          )}
           <CompositeCanvas
             key={`${canvasSize.width}x${canvasSize.height}`}
             ref={canvasRef}
@@ -306,6 +418,7 @@ export default function Home() {
                 layer={selectedLayer}
                 onParamChange={updateLayerParam}
                 onMetaChange={updateLayerMeta}
+                onModChange={setLayerModulation}
               />
             ) : (
               <div className="text-xs text-gray-600 text-center py-8">
@@ -315,6 +428,14 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <AIPromptPanel
+        open={showAI}
+        onClose={() => setShowAI(false)}
+        onGenerate={loadPoster}
+        onRevert={undo}
+        canvasRatio={state.canvasRatio}
+      />
 
       <GeneratePanel
         open={showGenerate}
@@ -327,6 +448,7 @@ export default function Home() {
         onClose={() => setShowTemplates(false)}
         currentState={state}
         onLoad={loadPoster}
+        getThumbnail={() => canvasRef.current?.captureThumbnail() ?? null}
       />
 
       <CalendarFormPanel

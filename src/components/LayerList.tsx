@@ -10,11 +10,13 @@ interface LayerListProps {
   onSelect: (id: string) => void;
   onToggleVisibility: (id: string) => void;
   onRemove: (id: string) => void;
+  onDuplicate: (id: string) => void;
+  onRename: (id: string, name: string) => void;
   onReorder: (fromIndex: number, toIndex: number) => void;
   onAddLayer: (type: EngineType) => void;
 }
 
-const engineTypes: EngineType[] = ['rastr', 'textr', 'dither', 'img-dither', 'object3d', 'label', 'logo'];
+const engineTypes = Object.keys(engineRegistry) as EngineType[];
 
 export function LayerList({
   layers,
@@ -22,10 +24,14 @@ export function LayerList({
   onSelect,
   onToggleVisibility,
   onRemove,
+  onDuplicate,
+  onRename,
   onReorder,
   onAddLayer,
 }: LayerListProps) {
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
 
@@ -116,13 +122,55 @@ export function LayerList({
                 {layer.visible ? '●' : '○'}
               </button>
 
-              {/* Layer name */}
-              <span className="flex-1 text-xs text-gray-300 truncate">{layer.name}</span>
+              {/* Layer name — double-click to rename */}
+              {renamingId === layer.id ? (
+                <input
+                  autoFocus
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  onBlur={() => {
+                    if (renameValue.trim()) onRename(layer.id, renameValue.trim());
+                    setRenamingId(null);
+                  }}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                    if (e.key === 'Escape') setRenamingId(null);
+                  }}
+                  className="flex-1 min-w-0 px-1 py-0.5 text-xs bg-[#222] border border-blue-500 rounded text-white focus:outline-none"
+                />
+              ) : (
+                <span
+                  className="flex-1 text-xs text-gray-300 truncate"
+                  title={`${layer.name} — double-click to rename`}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    setRenamingId(layer.id);
+                    setRenameValue(layer.name);
+                  }}
+                >
+                  {layer.name}
+                </span>
+              )}
 
               {/* Engine badge */}
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#333] text-gray-500 uppercase">
                 {engineRegistry[layer.engineType].label}
               </span>
+
+              {/* Duplicate */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDuplicate(layer.id);
+                }}
+                title="Duplicate (⌘D)"
+                aria-label="Duplicate layer"
+                className="text-gray-600 hover:text-white text-[10px] transition-colors"
+              >
+                ⧉
+              </button>
 
               {/* Delete */}
               <button
@@ -130,6 +178,8 @@ export function LayerList({
                   e.stopPropagation();
                   onRemove(layer.id);
                 }}
+                title="Delete"
+                aria-label="Delete layer"
                 className="text-gray-600 hover:text-red-400 text-[10px] transition-colors"
               >
                 ✕

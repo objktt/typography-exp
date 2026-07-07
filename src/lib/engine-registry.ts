@@ -6,6 +6,8 @@ import { ImgDitherEngine, imgDitherParams } from './img-dither-engine';
 import { Object3DEngine, object3dParams } from './object3d-engine';
 import { LabelEngine, labelParams } from './label-engine';
 import { LogoEngine, logoParams } from './logo-engine';
+import { CustomEngine, customParams } from './custom-engine';
+import { LottieEngine, lottieParams } from './lottie-engine';
 
 interface EngineRegistryEntry {
   label: string;
@@ -56,6 +58,18 @@ export const engineRegistry: Record<EngineType, EngineRegistryEntry> = {
     createEngine: () => new LogoEngine(),
     params: logoParams,
     defaultName: 'Logo Layer',
+  },
+  custom: {
+    label: 'CODE',
+    createEngine: () => new CustomEngine(),
+    params: customParams,
+    defaultName: 'Code Layer',
+  },
+  lottie: {
+    label: 'LOTTIE',
+    createEngine: () => new LottieEngine(),
+    params: lottieParams,
+    defaultName: 'Lottie Layer',
   },
 };
 

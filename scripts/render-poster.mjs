@@ -12,6 +12,7 @@
 // Requires: puppeteer (npm i -D puppeteer), ffmpeg on PATH (for --video).
 
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { mkdir, writeFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -32,9 +33,27 @@ const fps = Number(arg('fps', 30));
 const eventJson = arg('event', '{"title":"Listening Session","dj":"GOOD BOY","dateText":"SAT 13 JUN","timeText":"ALL NIGHT","slogan":"Every Object is a Universe in Itself."}');
 const name = String(arg('name', 'poster'));
 
+// The app's proxy only honors ?gen when it carries the matching RENDER_SECRET
+// (otherwise the request is redirected to the sign-in gate). Resolution order:
+// --key flag, RENDER_SECRET env var, then .env.local in the repo root.
+function envLocalRenderSecret() {
+  try {
+    const envFile = readFileSync(new URL('../.env.local', import.meta.url), 'utf8');
+    const line = envFile.split('\n').find((l) => l.startsWith('RENDER_SECRET='));
+    return line ? line.slice('RENDER_SECRET='.length).trim() : '';
+  } catch {
+    return '';
+  }
+}
+const renderKey = arg('key', process.env.RENDER_SECRET || envLocalRenderSecret());
+if (!renderKey || renderKey === true) {
+  console.error('RENDER_SECRET is required (--key, env var, or .env.local) — must match the app\'s RENDER_SECRET.');
+  process.exit(1);
+}
+
 const event = JSON.parse(eventJson);
 const payload = Buffer.from(JSON.stringify({ event, style, format }), 'utf8').toString('base64');
-const target = `${url}/?gen=${payload}`;
+const target = `${url}/?gen=${payload}&key=${encodeURIComponent(renderKey)}`;
 
 const dataUrlToBuffer = (d) => Buffer.from(d.split(',')[1], 'base64');
 

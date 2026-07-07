@@ -14,7 +14,7 @@ export interface ControlParam {
   default: any;
 }
 
-export type EngineType = 'rastr' | 'textr' | 'dither' | 'img-dither' | 'object3d' | 'label' | 'logo';
+export type EngineType = 'rastr' | 'textr' | 'dither' | 'img-dither' | 'object3d' | 'label' | 'logo' | 'custom' | 'lottie';
 
 export type BlendMode =
   | 'source-over'
@@ -36,6 +36,20 @@ export interface LayerEngine {
   dispose?(): void;
 }
 
+/** Live input signals a numeric param can be bound to. */
+export type ModSource = 'audioLevel' | 'audioBass' | 'audioTreble' | 'mouseX' | 'mouseY' | 'lfo';
+
+/**
+ * Binds one numeric param to a live signal:
+ * effective = clamp(base + signal * amount * (paramMax - paramMin)).
+ * Audio/mouse signals are 0..1; lfo is a -1..1 sine at `speed` Hz.
+ */
+export interface ParamModulation {
+  source: ModSource;
+  amount: number; // -1..1 — fraction of the param's full range
+  speed?: number; // lfo only, Hz
+}
+
 export interface Layer {
   id: string;
   name: string;
@@ -44,6 +58,8 @@ export interface Layer {
   opacity: number;
   blendMode: BlendMode;
   params: Record<string, any>;
+  /** Param key → live-input binding. Applied at draw time; base params stay untouched. */
+  modulations?: Record<string, ParamModulation>;
 }
 
 export interface PosterState {
