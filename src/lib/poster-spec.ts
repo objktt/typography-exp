@@ -109,7 +109,7 @@ const ENGINE_DESCRIPTIONS: Record<EngineType, string> = {
   dither: 'Large typographic dither — text rendered through 1-bit ordered/error-diffusion dithering. Bold experimental hero type. foregroundColor paints the TEXT, backgroundColor the surrounding field; set transparentBg true to keep only the dithered text (for layering over other layers). Anchor with posX/posY (text center) and ALWAYS set fitWidth on wide headlines.',
   'img-dither': 'An uploaded image processed with dithering. ONLY use when the brief supplies an image URL; otherwise skip this engine.',
   object3d: 'WebGL 3D hero object — extruded text (1–3 ASCII characters look best), a geometric primitive, or a GLB model, with material/lighting/motion and optional dither post-processing. Usually the visual centerpiece.',
-  label: 'Static typographic block with precise layout control (posX/posY are 0..1 canvas fractions, align/vAlign anchor the block). Use for headlines, kickers, date/time/venue info lines, slogans, and credits. Supports multi-line text via \\n.',
+  label: 'Static typographic block with precise layout control (posX/posY are 0..1 canvas fractions, align/vAlign anchor the block). Use for headlines, kickers, date/time/venue info lines, slogans, and credits. Supports multi-line text via \\n. Set dither: true for an experimental dithered treatment of the text itself (ditherType/ditherPixel/ditherThreshold; field stays transparent).',
   logo: 'Places the brand logo image (default /logo.svg, tintable). Small, anchored to a corner.',
   lottie: 'Plays a Lottie/Bodymovin JSON vector animation as a layer, synced to the studio timeline. ONLY use when the brief supplies a Lottie JSON URL (lottieSource); otherwise skip this engine.',
   custom: [
