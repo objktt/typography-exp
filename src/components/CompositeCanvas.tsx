@@ -359,6 +359,8 @@ export const CompositeCanvas = forwardRef<CompositeCanvasRef, CompositeCanvasPro
 
     // Apply CSS size to the p5 canvas element so it visually matches zoom
     // (internal resolution stays the same for export quality)
+    const displaySizeRef = useRef({ w: displayW, h: displayH });
+    displaySizeRef.current = { w: displayW, h: displayH };
     useEffect(() => {
       if (!canvasWrapRef.current) return;
       const canvas = canvasWrapRef.current.querySelector('canvas');
@@ -577,6 +579,16 @@ export const CompositeCanvas = forwardRef<CompositeCanvasRef, CompositeCanvasPro
         };
 
         p5Instance.current = new P5(sketch, canvasWrapRef.current);
+
+        // The CSS-size effect may have run before the canvas element existed
+        // (p5 loads async) — apply the current display size once it's in the DOM.
+        requestAnimationFrame(() => {
+          const canvas = canvasWrapRef.current?.querySelector('canvas') as HTMLCanvasElement | null;
+          if (canvas) {
+            canvas.style.width = `${displaySizeRef.current.w}px`;
+            canvas.style.height = `${displaySizeRef.current.h}px`;
+          }
+        });
       });
 
       return () => {

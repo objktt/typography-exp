@@ -18,7 +18,8 @@ const HISTORY_LIMIT = 60;
 /** Mutations closer together than this coalesce into one history entry (slider drags). */
 const COALESCE_MS = 400;
 
-export function usePosterState() {
+export function usePosterState(opts?: { persist?: boolean }) {
+  const persist = opts?.persist !== false;
   const [state, setState] = useState<PosterState>({
     canvasRatio: '1:1',
     backgroundColor: '#1a1a1a',
@@ -101,6 +102,7 @@ export function usePosterState() {
   // never loses work. Skipped when a headless/share param is about to load a
   // different design anyway.
   useEffect(() => {
+    if (!persist) return;
     const t = setTimeout(() => {
       try {
         if (stateRef.current.layers.length > 0) {
@@ -109,9 +111,10 @@ export function usePosterState() {
       } catch { /* storage full / private mode */ }
     }, 600);
     return () => clearTimeout(t);
-  }, [state]);
+  }, [state, persist]);
 
   useEffect(() => {
+    if (!persist) return;
     const q = new URLSearchParams(window.location.search);
     if (q.has('gen') || q.has('t')) return;
     try {

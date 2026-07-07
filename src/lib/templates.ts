@@ -48,8 +48,8 @@ export async function getTemplate(id: string): Promise<PosterState | null> {
   return data.state;
 }
 
-/** Build a shareable URL that auto-loads a template on open. */
+/** Shareable URL — a public read-only viewer that plays the poster live. */
 export function shareUrl(id: string): string {
-  if (typeof window === 'undefined') return `/?t=${id}`;
-  return `${window.location.origin}/?t=${id}`;
+  if (typeof window === 'undefined') return `/v/${id}`;
+  return `${window.location.origin}/v/${id}`;
 }
