@@ -1,20 +1,5 @@
 [
   {
-    "date": "2026-06-27",
-    "dj": "PAPAYA",
-    "title": "Listening Session",
-    "timeText": "20:00 – 23:00",
-    "kind": "listening",
-    "lineup": "Hogi & Hender"
-  },
-  {
-    "date": "2026-07-04",
-    "dj": "Razzo",
-    "title": "Listening Session",
-    "timeText": "21:00 – 23:00",
-    "kind": "listening"
-  },
-  {
     "date": "2026-07-11",
     "dj": "Layer1",
     "title": "Listening Session",
@@ -23,9 +8,9 @@
   },
   {
     "date": "2026-07-18",
-    "dj": "TBD",
+    "dj": "Sinabro & Camelisblue",
     "title": "Listening Session",
-    "timeText": "21:00 – 23:00",
+    "timeText": "20:00 – 23:00",
     "kind": "listening"
   },
   {
@@ -38,6 +23,13 @@
   {
     "date": "2026-08-14",
     "dj": "Nanako",
+    "title": "Listening Session",
+    "timeText": "21:00 – 23:00",
+    "kind": "listening"
+  },
+  {
+    "date": "2026-08-29",
+    "dj": "Jeepsooni",
     "title": "Listening Session",
     "timeText": "21:00 – 23:00",
     "kind": "listening"
